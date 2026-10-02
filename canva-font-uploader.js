@@ -3,8 +3,8 @@
   Canva Font Auto Uploader helper
 
   This script is launched by Canva_Font_Auto_Upload.bat on Windows.
-  It opens Canva in a real Chromium browser, uploads fonts in batches of 20,
-  and tries to click common confirmation / Skip buttons.
+  It opens Canva in your installed Chrome or Microsoft Edge browser, uploads
+  fonts in batches of 20, and tries to click common confirmation / Skip buttons.
 
   Important: Canva does not publish a stable public UI automation contract for
   font uploads. If Canva changes button names or page structure, the script will
@@ -28,6 +28,7 @@ function parseArgs(argv) {
     delaySeconds: DEFAULT_DELAY_SECONDS,
     startUrl: DEFAULT_START_URL,
     profileDir: path.join(__dirname, '.canva-browser-profile'),
+    browser: 'auto',
     dryRun: false,
     resume: false,
     noAutoClick: false,
@@ -51,6 +52,9 @@ function parseArgs(argv) {
       options.startUrl = arg.split('=').slice(1).join('=');
     } else if (arg.startsWith('--profile-dir=')) {
       options.profileDir = path.resolve(arg.split('=').slice(1).join('='));
+    } else if (arg.startsWith('--browser=')) {
+      options.browser = arg.split('=').slice(1).join('=').trim().toLowerCase();
+      if (options.browser === 'edge') options.browser = 'msedge';
     } else if (!arg.startsWith('--') && !options.folder) {
       options.folder = path.resolve(arg);
     } else {
@@ -64,12 +68,15 @@ function parseArgs(argv) {
   if (!Number.isFinite(options.delaySeconds) || options.delaySeconds < 0) {
     throw new Error('--delay-seconds must be 0 or higher.');
   }
+  if (!['auto', 'chrome', 'msedge', 'chromium'].includes(options.browser)) {
+    throw new Error('--browser must be auto, chrome, msedge, or chromium.');
+  }
 
   return options;
 }
 
 function printHelp() {
-  console.log(`Canva Font Auto Uploader\n\nUsage:\n  node canva-font-uploader.js "C:\\Path\\To\\Fonts" [options]\n\nOptions:\n  --batch-size=20          Files per upload batch. Max: 20. Default: 20\n  --delay-seconds=12       Seconds to wait after each batch. Default: 12\n  --start-url=URL          Canva page to open. Default: ${DEFAULT_START_URL}\n  --profile-dir=PATH       Browser profile folder so your Canva login is saved\n  --resume                 Skip files already marked as attempted in the log\n  --dry-run                Only show the planned batches; do not open Canva\n  --no-auto-click          Do not try to click Canva Upload buttons automatically;\n                           you click Upload Font when asked, files are filled in\n  --help                   Show this help\n`);
+  console.log(`Canva Font Auto Uploader\n\nUsage:\n  node canva-font-uploader.js "C:\\Path\\To\\Fonts" [options]\n\nOptions:\n  --batch-size=20          Files per upload batch. Max: 20. Default: 20\n  --delay-seconds=12       Seconds to wait after each batch. Default: 12\n  --start-url=URL          Canva page to open. Default: ${DEFAULT_START_URL}\n  --profile-dir=PATH       Browser profile folder so your Canva login is saved\n  --browser=auto           Browser to use: auto, chrome, msedge, chromium. Default: auto\n                           auto uses installed Chrome/Edge, no Chromium download needed\n  --resume                 Skip files already marked as attempted in the log\n  --dry-run                Only show the planned batches; do not open Canva\n  --no-auto-click          Do not try to click Canva Upload buttons automatically;\n                           you click Upload Font when asked, files are filled in\n  --help                   Show this help\n`);
 }
 
 function question(prompt) {
@@ -140,9 +147,72 @@ async function requirePlaywright() {
     return require('playwright');
   } catch (error) {
     console.error('\nPlaywright is not installed. Please run Canva_Font_Auto_Upload.bat so it can install it automatically.');
-    console.error('If you are running this JS file directly, install it with: npm install playwright && npx playwright install chromium\n');
+    console.error('If you are running this JS file directly, install it with: npm install playwright\n');
     throw error;
   }
+}
+
+
+function browserPaths(browserName) {
+  const env = process.env;
+  const programFiles = [env.PROGRAMFILES, env['PROGRAMFILES(X86)'], env.LOCALAPPDATA].filter(Boolean);
+
+  if (browserName === 'chrome') {
+    return programFiles.map((base) => path.join(base, 'Google', 'Chrome', 'Application', 'chrome.exe'));
+  }
+  if (browserName === 'msedge') {
+    return programFiles.map((base) => path.join(base, 'Microsoft', 'Edge', 'Application', 'msedge.exe'));
+  }
+  return [];
+}
+
+function launchCandidates(browser) {
+  const candidates = [];
+  const addChannel = (channel, label) => candidates.push({ label, launch: { channel } });
+  const addPaths = (name, label) => {
+    for (const executablePath of browserPaths(name)) {
+      if (fs.existsSync(executablePath)) {
+        candidates.push({ label: `${label} (${executablePath})`, launch: { executablePath } });
+      }
+    }
+  };
+
+  if (browser === 'auto' || browser === 'chrome') {
+    addChannel('chrome', 'Google Chrome');
+    addPaths('chrome', 'Google Chrome');
+  }
+  if (browser === 'auto' || browser === 'msedge') {
+    addChannel('msedge', 'Microsoft Edge');
+    addPaths('msedge', 'Microsoft Edge');
+  }
+  if (browser === 'chromium') {
+    candidates.push({ label: 'Playwright Chromium', launch: {} });
+  }
+  return candidates;
+}
+
+async function launchBrowser(chromium, options) {
+  const candidates = launchCandidates(options.browser);
+  const errors = [];
+
+  for (const candidate of candidates) {
+    try {
+      console.log(`Opening browser: ${candidate.label}`);
+      return await chromium.launchPersistentContext(options.profileDir, {
+        ...candidate.launch,
+        headless: false,
+        viewport: null,
+        args: ['--start-maximized'],
+      });
+    } catch (error) {
+      errors.push(`${candidate.label}: ${error.message}`);
+    }
+  }
+
+  throw new Error(
+    'Could not open installed Google Chrome or Microsoft Edge. Install Chrome/Edge, or run with --browser=chromium after Playwright Chromium is installed.\n' +
+    errors.map((line) => `- ${line}`).join('\n')
+  );
 }
 
 async function allFrames(page) {
@@ -158,6 +228,7 @@ const CONFIRM_OR_SKIP_BUTTONS = [
   /^Yes,? upload/i,
   /upload away/i,
   /^Upload anyway$/i,
+  /Use anyway/i,
   /^Confirm$/i,
   /^Continue$/i,
   /^Done$/i,
@@ -165,12 +236,19 @@ const CONFIRM_OR_SKIP_BUTTONS = [
   /^Okay$/i,
   /^Got it$/i,
   /I have (the )?right/i,
+  /I confirm.*right/i,
   /I own (this|these) font/i,
   /I agree/i,
   /ကျော်/i,
   /ဆက်/i,
   /အတည်ပြု/i,
   /ပြီး/i,
+];
+
+const AFTER_FILE_SELECT_BUTTONS = [
+  ...CONFIRM_OR_SKIP_BUTTONS,
+  /^Upload$/i,
+  /^Upload fonts$/i,
 ];
 
 const UPLOAD_BUTTONS = [
@@ -182,6 +260,7 @@ const UPLOAD_BUTTONS = [
   /^Add font$/i,
   /^Add fonts$/i,
   /^Add new font$/i,
+  /^Add new$/i,
   /^Choose files?$/i,
   /^Browse$/i,
   /^Upload$/i,
@@ -211,11 +290,12 @@ async function clickButtonByName(scope, names, timeout = 700) {
   return false;
 }
 
-async function clickCommonPrompts(page) {
+async function clickCommonPrompts(page, afterFileSelect = false) {
   let clickedAny = false;
+  const buttonNames = afterFileSelect ? AFTER_FILE_SELECT_BUTTONS : CONFIRM_OR_SKIP_BUTTONS;
   for (const frame of await allFrames(page)) {
     try {
-      const clicked = await clickButtonByName(frame, CONFIRM_OR_SKIP_BUTTONS, 450);
+      const clicked = await clickButtonByName(frame, buttonNames, 450);
       if (clicked) {
         clickedAny = true;
         await sleep(350);
@@ -227,10 +307,10 @@ async function clickCommonPrompts(page) {
   return clickedAny;
 }
 
-async function sweepPrompts(page, seconds) {
+async function sweepPrompts(page, seconds, afterFileSelect = false) {
   const deadline = Date.now() + seconds * 1000;
   while (Date.now() < deadline) {
-    await clickCommonPrompts(page);
+    await clickCommonPrompts(page, afterFileSelect);
     await sleep(900);
   }
 }
@@ -282,7 +362,7 @@ async function clickUploadAndSetFiles(page, files, options) {
 
 async function askUserToClickUpload(page, files) {
   console.log('\nCanva Upload Font ခလုတ်ကို browser ထဲမှာ click လုပ်ပေးပါ။ File picker ပွင့်လာရင် script က 20 files ကို auto ထည့်ပေးပါမယ်။');
-  console.log('Please click Canva\'s Upload Font button in the browser within 90 seconds. Do NOT choose files manually.');
+  console.log('Please click Canva\'s Upload Font / Add new button in the browser within 90 seconds. Do NOT choose files manually.');
 
   const fileChooserPromise = page.waitForEvent('filechooser', { timeout: 90000 });
   const fileChooser = await fileChooserPromise;
@@ -326,6 +406,7 @@ async function main() {
   if (options.resume) console.log(`Resume mode  : ${allFiles.length - files.length} already-attempted file(s) skipped`);
   console.log(`To upload    : ${files.length}`);
   console.log(`Batch size   : ${options.batchSize}`);
+  console.log(`Browser      : ${options.browser} (installed Chrome/Edge is used when possible)`);
   console.log(`Batches      : ${batches.length}`);
   console.log('Extensions   : .ttf, .otf, .woff, .woff2');
   console.log(`Log file     : ${getLogPath(options.folder)}\n`);
@@ -347,24 +428,22 @@ async function main() {
 
   console.log('\nImportant: use only fonts you have permission to upload/use in Canva.');
   console.log('The browser profile is saved locally so you normally log in only once.');
+  console.log('This version uses installed Google Chrome or Microsoft Edge, so it does NOT download Playwright Chromium.');
   await question('Press ENTER to open Canva and start...');
 
   const { chromium } = await requirePlaywright();
   await fs.promises.mkdir(options.profileDir, { recursive: true });
 
-  const context = await chromium.launchPersistentContext(options.profileDir, {
-    headless: false,
-    viewport: null,
-    args: ['--start-maximized'],
-  });
+  const context = await launchBrowser(chromium, options);
   const page = context.pages()[0] || await context.newPage();
   page.setDefaultTimeout(7000);
 
   await page.goto(options.startUrl, { waitUntil: 'domcontentloaded' });
 
   console.log('\nCanva browser opened. If needed, log in manually.');
-  console.log('Then go to Brand Kit / Fonts where the Upload Font button is visible.');
-  await question('When the Upload Font button is visible, press ENTER here...');
+  console.log('Then go to Brand Kit > Fonts and open the Uploaded fonts popup.');
+  console.log('Make sure the "Add new" button in the Uploaded fonts popup is visible, like your screenshot.');
+  await question('When the Add new / Upload Font button is visible, press ENTER here...');
 
   for (let index = 0; index < batches.length; index++) {
     const batch = batches[index];
@@ -385,7 +464,7 @@ async function main() {
       break;
     }
 
-    await sweepPrompts(page, Math.max(8, options.delaySeconds));
+    await sweepPrompts(page, Math.max(8, options.delaySeconds), true);
 
     log.batches = log.batches || [];
     log.attemptedFiles = log.attemptedFiles || [];
@@ -402,7 +481,7 @@ async function main() {
 
     if (index < batches.length - 1) {
       console.log(`Waiting ${options.delaySeconds} second(s) before next batch. The script will keep clicking common Skip/Confirm buttons.`);
-      await sweepPrompts(page, options.delaySeconds);
+      await sweepPrompts(page, options.delaySeconds, true);
     }
   }
 

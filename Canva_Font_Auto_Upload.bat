@@ -53,6 +53,9 @@ if errorlevel 1 (
 
 if not exist "%TOOLS_DIR%" mkdir "%TOOLS_DIR%" >nul 2>nul
 
+REM Use the Chrome/Edge already installed on your computer. Do not download Playwright Chromium.
+set "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1"
+
 if not exist "%TOOLS_DIR%\package.json" (
   > "%TOOLS_DIR%\package.json" echo {"private":true,"name":"canva-font-uploader-tools","dependencies":{"playwright":"latest"}}
 )
@@ -60,6 +63,7 @@ if not exist "%TOOLS_DIR%\package.json" (
 if not exist "%TOOLS_DIR%\node_modules\playwright\package.json" (
   echo.
   echo First run ဖြစ်လို့ Playwright browser automation tools ကို install လုပ်နေပါတယ်...
+  echo Chrome/Edge ကိုပဲသုံးမှာဖြစ်လို့ Chromium browser download မလုပ်တော့ပါ။
   echo This can take a few minutes.
   pushd "%TOOLS_DIR%"
   call npm install --no-audit --no-fund
@@ -67,14 +71,6 @@ if not exist "%TOOLS_DIR%\node_modules\playwright\package.json" (
     popd
     echo.
     echo ERROR: Playwright install မအောင်မြင်ပါ။ Internet connection ကိုစစ်ပါ။
-    pause
-    exit /b 1
-  )
-  call npx playwright install chromium
-  if errorlevel 1 (
-    popd
-    echo.
-    echo ERROR: Chromium install မအောင်မြင်ပါ။
     pause
     exit /b 1
   )
@@ -87,7 +83,7 @@ echo.
 echo Starting Canva font uploader...
 echo Font folder: "%FONT_DIR%"
 echo.
-node "%JS_FILE%" "%FONT_DIR%" --batch-size=20 --delay-seconds=12
+node "%JS_FILE%" "%FONT_DIR%" --batch-size=20 --delay-seconds=12 --browser=auto
 
 echo.
 pause
