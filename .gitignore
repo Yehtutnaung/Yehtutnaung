@@ -1,0 +1,7 @@
+# Local dependencies / browser automation cache
+node_modules/
+.canva-browser-profile/
+
+# Canva upload helper runtime logs
+.canva-font-upload-log.json
+*.log
