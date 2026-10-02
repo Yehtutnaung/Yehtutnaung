@@ -269,19 +269,43 @@ const UPLOAD_BUTTONS = [
   /ဖိုင်.*ရွေး/i,
 ];
 
+async function tryClickAny(locator, timeout = 700) {
+  let count = 0;
+  try {
+    count = await locator.count();
+  } catch (_) {
+    return false;
+  }
+
+  // Canva often keeps hidden old controls in the DOM. Try the last matches first,
+  // because visible popups are usually appended near the end of the document.
+  const maxToTry = Math.min(count, 12);
+  for (let offset = 0; offset < maxToTry; offset++) {
+    const index = count - 1 - offset;
+    try {
+      await locator.nth(index).click({ timeout });
+      return true;
+    } catch (_) {
+      // Try the next matching element.
+    }
+  }
+  return false;
+}
+
 async function clickButtonByName(scope, names, timeout = 700) {
   for (const name of names) {
     const candidates = [
-      () => scope.getByRole('button', { name }).first(),
-      () => scope.getByRole('link', { name }).first(),
-      () => scope.getByText(name).first(),
+      () => scope.locator('[role="dialog"] button').filter({ hasText: name }),
+      () => scope.locator('[aria-modal="true"] button').filter({ hasText: name }),
+      () => scope.locator('button').filter({ hasText: name }),
+      () => scope.getByRole('button', { name }),
+      () => scope.getByRole('link', { name }),
+      () => scope.getByText(name),
     ];
 
     for (const makeLocator of candidates) {
       try {
-        const locator = makeLocator();
-        await locator.click({ timeout });
-        return true;
+        if (await tryClickAny(makeLocator(), timeout)) return true;
       } catch (_) {
         // Try next label / locator style.
       }
@@ -341,6 +365,8 @@ async function setFilesOnExistingInput(page, files) {
 async function clickUploadAndSetFiles(page, files, options) {
   if (options.noAutoClick) return false;
 
+  console.log('Trying to click Canva Add new / Upload Font automatically...');
+
   for (const frame of await allFrames(page)) {
     try {
       const fileChooserPromise = page.waitForEvent('filechooser', { timeout: 2000 }).catch(() => null);
@@ -376,6 +402,7 @@ async function uploadOneBatch(page, files, options) {
   if (await clickUploadAndSetFiles(page, files, options)) return 'clicked-upload-button';
   if (await setFilesOnExistingInput(page, files)) return 'existing-file-input';
 
+  console.log('Auto click did not open the file picker. Manual click fallback is starting now.');
   await askUserToClickUpload(page, files);
   return 'manual-click-filechooser';
 }
