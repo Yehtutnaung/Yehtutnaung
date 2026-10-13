@@ -166,3 +166,19 @@
 2. **🟢 v220.71 ဖြင့် `DC-REVIEW` error ရှိပြီးသား row များ `check` တွင် ထာဝရ ကျန်** (21889)
    `status='hold'` ပြောင်းသည့် UPDATE သည် `if (!/^DC-REVIEW/…)` ထဲတွင်ရှိ၍ v220.71 ကတည်းက `DC-REVIEW` error ရထားသော row များ `hold` မဖြစ်တော့ဘဲ cron တိုင်း history ကို ဆက်ခေါ်နေမည်။ ပြင်နည်း — `status='hold'` UPDATE ကို guard အပြင်ထုတ်ပြီး notify ကိုသာ guard ထဲထားပါ။
 3. **ℹ️ Trade-off** — ယခု ပစ္စည်း **ရှင်းရှင်း မတူသော** candidate (တခြား customer ၏ order) ရှိရုံဖြင့်လည်း `hold` ဖြစ်မည်။ ငွေဘက် ဘေးကင်းသော်လည်း Admin စစ်ရမည့် order ပိုများနိုင်သည်။ ID ရှိပြီး မကိုက်သော candidate ကိုသာ ကျော်လိုလျှင် `ids.length && !ids.includes(want)` → `continue`၊ `ids.length===0` → `unsure` ဟု ခွဲနိုင်သည်။
+
+---
+
+## v220.73 ပြန်စစ်ချက်
+
+`node --check` ✅ · ပြောင်းထားသည်မှာ `dcReconcile` သာ
+
+| v220.72 သတိပေးချက် | အခြေအနေ |
+|---|---|
+| ကိုယ့် `ps_order_id` ကို claimed ထဲ ထည့်မိ → refund | ✅ ပြင်ပြီး — ID ရှိလျှင် `GET /order` တိုက်ရိုက် (Processing စစ်ပြီးမှ)၊ claimed query တွင် `order_id<>?` |
+| `DC-REVIEW` row များ `check` တွင် ကျန် | ✅ ပြင်ပြီး — `hold` UPDATE ကို guard အပြင်ထုတ် |
+| ပစ္စည်းမတူ candidate ကြောင့် hold များခြင်း | ✅ ID အမျိုးတူ (ဂဏန်း↔ဂဏန်း / slug↔slug) မကိုက်လျှင် ကျော်၊ အမျိုးမတူမှသာ hold |
+
+### အသေးစား (မဖြစ်မနေ မဟုတ်)
+
+- **🟢 DigitalCore order `paid` (keys မပါ) သို့မဟုတ် `GET /order` အမြဲ fail** — `check`/`paid` တွင် cron တိုင်း ပြန်ခေါ်နေပြီး ၂၄ နာရီ alert မထွက် (`psTick` alert သည် `ps_order_id` မရှိသော row အတွက်သာ)။ ငွေဘက် ဘေးကင်း။ လိုလျှင် `dcReconcile` ၏ `row.ps_order_id` လမ်းကြောင်းတွင် `created` > 24h နှင့် `!alerted` ဆိုလျှင် Admin ကို တစ်ခါ အသိပေးပါ။
