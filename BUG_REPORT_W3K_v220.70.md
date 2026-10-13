@@ -109,3 +109,30 @@
 - **Website** — session hash သိမ်း၊ Telegram Login Widget HMAC၊ one-time hash၊ number-matching login၊ JSON-LD `<` escape
 - **SQL** — dynamic SQL အားလုံး constant fragment + `?` bind
 - **XSS** — Dashboard ၂၁၀ နေရာ `innerHTML` နှင့် website HTML များတွင် DB/Supplier data ကို `esc()` ဖြင့်သာ ထည့်
+
+---
+
+## v220.71 ပြန်စစ်ချက် (2026-10-13)
+
+`node --check` ✅ · ESLint server/Dashboard ✅ (အသစ် error မရှိ၊ `shrinkImage` နာမည်ထပ် ပျောက်ပြီ)
+
+| Bug | အခြေအနေ | မှတ်ချက် |
+|---|---|---|
+| #1 shrinkImage | ✅ ပြင်ပြီး | `shrinkImageFile` (29486/29504) |
+| #2 Withdrawal ငွေ ၂ ဆ | ✅ ပြင်ပြီး | `send_failed` + `proof_file_id IS NULL` guard ၂ ထပ်; stale `sending` ကိုလည်း `proof_file_id` က ကာကွယ် |
+| #3 DigitalCore reconcile | ⚠️ ပြင်ပြီး၊ သတိ ၁ ချက် | အောက်တွင် ကြည့်ပါ |
+| #4 Auto-approve release | ✅ ပြင်ပြီး | `at` သုံး |
+| #5 409 → refund | ✅ ပြင်ပြီး | `hold` ထား၊ Admin သို့ အသိပေး |
+| #6 paid + ID မရှိ | ✅ alert ထပ်ထည့်ပြီး | duplicate alert အသေးစား ၁ ခု (အောက်တွင်) |
+| #7–#11 | ⏸ မပြင်ရသေး | webLoginPoll expiry၊ Gift ကွက်လပ်၊ KBZPay/KPay alias၊ `remove` global၊ `FORCE_SUB_CHANNEL` |
+
+### v220.71 ပြင်ဆင်မှုထဲက သတိပြုရန်
+
+1. **🟠 `dcReconcile` — ID format မတူလျှင် refund ပြန်ဖြစ်နိုင်** (21869–21897)
+   `dcItemPid()` က `product_id` ကို အရင်ယူသည်။ DigitalCore history က `product_id` ကို ဂဏန်း (ဥပမာ `412`) ပေးပြီး ကျွန်ုပ်တို့ `ps_product_id` က slug (`dc:<slug>`) ဖြစ်နေလျှင် order အစစ်ကိုပါ "ပစ္စည်းမတူ" ဟု `continue` လုပ်ကာ `unsure` မဖြစ်ဘဲ ၆ မိနစ်ပြည့်လျှင် `psFail` → **refund** (DigitalCore ဘက်က ငွေကုန်ပြီး)။ v220.70 တုန်းက ဤအခြေအနေတွင် မှန်မှန် ပေးခဲ့သည်။
+   ပြင်နည်း — field အားလုံး (`product_id`, `productId`, `product_slug`, `slug`, `product.id`, `product.slug`) ထဲက **တစ်ခုခု** `want` နှင့် တူလျှင် match ဟုယူပါ။ candidate ရှိပြီး match မရှိလျှင်လည်း `unsure` (hold) ထားပြီး refund မလုပ်ပါနှင့်။
+2. **🟢 `psTick` — SafwanTiger 24-နာရီ alert ၂ ခါ** (22146–22152)
+   `sw` row (ID မရှိ) သည် `swPoll` ထဲတွင် alert ပို့ပြီး `alerted=1` ထားသော်လည်း loop ထဲ `row.alerted` က အဟောင်း (0) ဖြစ်၍ အသစ်ထည့်ထားသော block က ထပ်ပို့သည်။
+   ပြင်နည်း — `SELECT status, alerted …` ဖတ်ပြီး `!Number(cur.alerted)` ကိုပါ စစ်ပါ။
+3. **🟢 Dashboard — `hold` status အတွက် label/ခလုတ် မရှိ** (`PS_ST`, `psOrdersHtml` 38160)
+   `hold` ဖြစ်နေသော order ကို grey `hold` ဟုသာ ပြပြီး ဘာလုပ်ရမည် မပြ။ (Order သည် Processing ဖြစ်နေ၍ Operations မှ Deliver/Refund လုပ်နိုင်သည်) — `PS_ST.hold=['w','Check supplier']` ထည့်ရန် အကြံပြု။
