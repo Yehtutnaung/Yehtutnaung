@@ -136,3 +136,33 @@
    ပြင်နည်း — `SELECT status, alerted …` ဖတ်ပြီး `!Number(cur.alerted)` ကိုပါ စစ်ပါ။
 3. **🟢 Dashboard — `hold` status အတွက် label/ခလုတ် မရှိ** (`PS_ST`, `psOrdersHtml` 38160)
    `hold` ဖြစ်နေသော order ကို grey `hold` ဟုသာ ပြပြီး ဘာလုပ်ရမည် မပြ။ (Order သည် Processing ဖြစ်နေ၍ Operations မှ Deliver/Refund လုပ်နိုင်သည်) — `PS_ST.hold=['w','Check supplier']` ထည့်ရန် အကြံပြု။
+
+---
+
+## v220.72 ပြန်စစ်ချက်
+
+`node --check` ✅ · ပြောင်းထားသည်မှာ `dcReconcile`၊ `psTick` alert နှင့် `PS_ST.hold` သာ
+
+| v220.71 သတိပေးချက် | အခြေအနေ |
+|---|---|
+| DigitalCore ID format (ဂဏန်း vs slug) → refund | ✅ ပြင်ပြီး — field အားလုံး တိုက်၊ မကိုက်လျှင် `hold` |
+| SafwanTiger alert ၂ ခါ | ✅ ပြင်ပြီး — `alerted`, `ps_order_id` ကို DB မှ ပြန်ဖတ် |
+| Dashboard `hold` label | ✅ ပြင်ပြီး |
+
+### ကျန်နေသေးသော / အသစ်တွေ့သော
+
+1. **🟠 `dcReconcile` — ကိုယ့် order ID ကို "claimed" ထဲ ထည့်မိ၍ refund ဖြစ်နိုင် (v220.70 ကတည်းက ရှိ)** (21868, 21883–21886)
+   Match တွေ့ပြီး `ps_order_id` ကို သိမ်းပြီးမှ `GET /order?id=` က fail ဖြစ်လျှင် `{state:'check'}` ပြန်သည်။ နောက် cron တွင် `claimed` query က **ဤ row ကိုယ်တိုင်၏** `ps_order_id` ကိုပါ ယူသွားသဖြင့် ကိုယ့် order ကို candidate ထဲမှ ဖယ်လိုက်ကာ "history ထဲ မရှိ" → ၆ မိနစ်ကျော်ပြီးသားမို့ `psFail` → **refund** (DigitalCore ဘက်တွင် ငွေကုန်ပြီး)။
+   ပြင်နည်း —
+   ```js
+   // dcReconcile အစတွင်
+   if (row.ps_order_id) {
+     const d = await supCall(env, 'dc', 'GET', '/order?id=' + encodeURIComponent(String(row.ps_order_id)));
+     return d.ok ? psApply(env, orderId, Object.assign({ status: 'delivered', order_id: String(row.ps_order_id) }, d.json)) : { state: 'check' };
+   }
+   // claimed query တွင် ကိုယ့် row ကို ဖယ်
+   "... AND COALESCE(ps_order_id,'')<>'' AND order_id<>?" → .bind(orderId)
+   ```
+2. **🟢 v220.71 ဖြင့် `DC-REVIEW` error ရှိပြီးသား row များ `check` တွင် ထာဝရ ကျန်** (21889)
+   `status='hold'` ပြောင်းသည့် UPDATE သည် `if (!/^DC-REVIEW/…)` ထဲတွင်ရှိ၍ v220.71 ကတည်းက `DC-REVIEW` error ရထားသော row များ `hold` မဖြစ်တော့ဘဲ cron တိုင်း history ကို ဆက်ခေါ်နေမည်။ ပြင်နည်း — `status='hold'` UPDATE ကို guard အပြင်ထုတ်ပြီး notify ကိုသာ guard ထဲထားပါ။
+3. **ℹ️ Trade-off** — ယခု ပစ္စည်း **ရှင်းရှင်း မတူသော** candidate (တခြား customer ၏ order) ရှိရုံဖြင့်လည်း `hold` ဖြစ်မည်။ ငွေဘက် ဘေးကင်းသော်လည်း Admin စစ်ရမည့် order ပိုများနိုင်သည်။ ID ရှိပြီး မကိုက်သော candidate ကိုသာ ကျော်လိုလျှင် `ids.length && !ids.includes(want)` → `continue`၊ `ids.length===0` → `unsure` ဟု ခွဲနိုင်သည်။
