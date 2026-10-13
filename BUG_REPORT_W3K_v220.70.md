@@ -182,3 +182,24 @@
 ### အသေးစား (မဖြစ်မနေ မဟုတ်)
 
 - **🟢 DigitalCore order `paid` (keys မပါ) သို့မဟုတ် `GET /order` အမြဲ fail** — `check`/`paid` တွင် cron တိုင်း ပြန်ခေါ်နေပြီး ၂၄ နာရီ alert မထွက် (`psTick` alert သည် `ps_order_id` မရှိသော row အတွက်သာ)။ ငွေဘက် ဘေးကင်း။ လိုလျှင် `dcReconcile` ၏ `row.ps_order_id` လမ်းကြောင်းတွင် `created` > 24h နှင့် `!alerted` ဆိုလျှင် Admin ကို တစ်ခါ အသိပေးပါ။
+
+---
+
+## v220.74 ပြန်စစ်ချက်
+
+`node --check` ✅ · ESLint server/Dashboard ✅ (ဖျက်လိုက်သော function များကို ခေါ်သည့်နေရာ မကျန်)
+
+| Bug | အခြေအနေ |
+|---|---|
+| #7 webLoginPoll expiry | ✅ ပြင်ပြီး |
+| #8 Gift ကွက်လပ် | ✅ ပြင်ပြီး (`busy` — Bot `gf_` route နှင့် Website message ရှိ) · အသေးစား ကျန် ၁ (အောက်) |
+| #9 KBZPay/KPay | ✅ ပြင်ပြီး (`wkey` alias) |
+| #10 `remove` global | ✅ ပြင်ပြီး |
+| #11 `FORCE_SUB_CHANNEL` | ✅ ဖျက်ပြီး |
+| #12 Dead code | ✅ အများစု ဖျက်ပြီး |
+
+### ကျန်သော အသေးစား (မဖြစ်မနေ မဟုတ်)
+
+- **Gift `busy` ကို ၂ နေရာတွင် မစစ်ရသေး** — `giftClaimScreen` ၏ website-only branch (6891) နှင့် Website `/gift/<code>` page (17753) သည် `gift_claims` ကို တိုက်ရိုက်ဖတ်၍ code ယူနေစဉ် ခဏအတွင်း ကွက်လပ် ပြနိုင်သေး။ `g.kind==='code' && !m.code` ဆိုလျှင် မပြဘဲ ကျော်ရန်။
+- **Gift claim row `code=''` တွင် ပိတ်မိနိုင်** — claim row ထည့်ပြီး code မယူမီ Worker ပြတ်သွားလျှင် ထို customer သည် `busy` ကိုသာ အမြဲ မြင်မည် (ယခင်က ကွက်လပ်)။ ရှားသည်။ `gift_claims.ts` > 1 မိနစ် နှင့် code ကွက်လပ်ဆိုလျှင် row ကိုဖျက်ပြီး ပြန်ယူခွင့်ပေးနိုင်သည်။
+- **Dead code ကျန်** — `receiptVisionResultText`, `receiptVisionJson`, `receiptVisionAmount` (`readDepositReceiptVision` ဖျက်ပြီးနောက် မသုံးတော့)၊ `GOOGLE_ALLOWED_EMAILS` const၊ `WEB_OLIST_JS`, `WEB_WALLET_JS`။
