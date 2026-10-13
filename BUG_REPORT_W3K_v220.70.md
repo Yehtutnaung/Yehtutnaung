@@ -203,3 +203,26 @@
 - **Gift `busy` ကို ၂ နေရာတွင် မစစ်ရသေး** — `giftClaimScreen` ၏ website-only branch (6891) နှင့် Website `/gift/<code>` page (17753) သည် `gift_claims` ကို တိုက်ရိုက်ဖတ်၍ code ယူနေစဉ် ခဏအတွင်း ကွက်လပ် ပြနိုင်သေး။ `g.kind==='code' && !m.code` ဆိုလျှင် မပြဘဲ ကျော်ရန်။
 - **Gift claim row `code=''` တွင် ပိတ်မိနိုင်** — claim row ထည့်ပြီး code မယူမီ Worker ပြတ်သွားလျှင် ထို customer သည် `busy` ကိုသာ အမြဲ မြင်မည် (ယခင်က ကွက်လပ်)။ ရှားသည်။ `gift_claims.ts` > 1 မိနစ် နှင့် code ကွက်လပ်ဆိုလျှင် row ကိုဖျက်ပြီး ပြန်ယူခွင့်ပေးနိုင်သည်။
 - **Dead code ကျန်** — `receiptVisionResultText`, `receiptVisionJson`, `receiptVisionAmount` (`readDepositReceiptVision` ဖျက်ပြီးနောက် မသုံးတော့)၊ `GOOGLE_ALLOWED_EMAILS` const၊ `WEB_OLIST_JS`, `WEB_WALLET_JS`။
+
+---
+
+## v220.75 ပြန်စစ်ချက်
+
+`node --check` ✅ · ESLint ✅ (`no-undef` မရှိ — ဖျက်လိုက်သော function/const များကို ခေါ်သည့်နေရာ မကျန်)
+
+| v220.74 အသေးစား | အခြေအနေ |
+|---|---|
+| Gift `busy` မစစ်သော ၂ နေရာ | ✅ `giftMine()` တစ်ခုတည်းကို ၃ နေရာလုံး သုံး |
+| Claim row `code=''` တွင် ပိတ်မိ | ✅ ၆၀ စက္ကန့်ကျော်လျှင် heal (code ယူပြီးသားဆို ဖြည့်၊ မယူရသေးဆို claim ဖျက်) — သတိ ၁ ချက် (အောက်) |
+| Dead code | ✅ ဖျက်ပြီး (`receiptVisionField` တစ်ခုသာ မသုံးတော့ဘဲ ကျန်) |
+
+### သတိ ၁ ချက် (အသေးစား)
+
+- **🟢 Heal က claim ဖျက်သော်လည်း `gifts.claimed` ကို ပြန်မနုတ်** (`giftMine`, ≈6800)
+  ပိတ်မိသော claim သည် `claimed=claimed+1` ပြီးမှ ဖြစ်သည် (`up` အောင်ပြီး code မယူမီ ပြတ်)။ Row ကိုသာ ဖျက်လျှင် customer က ပြန်ယူသည့်အခါ `claimed` ထပ်တိုးပြီး Gift slot တစ်ခု ဆုံးမည် (max 100 ဆိုလျှင် 99 ယောက်သာ ရ)။
+  ပြင်နည်း —
+  ```js
+  const del = await env.DB.prepare("DELETE FROM gift_claims WHERE … AND ts<?").bind(…).run();
+  if (Number(del.meta && del.meta.changes) === 1)
+    await env.DB.prepare('UPDATE gifts SET claimed=claimed-1 WHERE id=? AND claimed>0').bind(g.id).run();
+  ```
